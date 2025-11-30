@@ -1,36 +1,20 @@
-################################## read and write files ##################################
-# def write_file(filename, data):
-#     try:
-#         with open(filename, 'w', encoding='utf-8') as file:
-#             file.write(data)
-#         print(f"Data successfully written to '{filename}'.")
-#     except (OSError, IOError) as e:
-#         print(f"Error writing to file '{filename}': {e}")
-
-# def read_file(filename):
-#     try:
-#         with open(filename, 'r', encoding='utf-8') as file:
-#             content = file.read()
-#         print(f"Data successfully read from '{filename}'.")
-#         return content
-#     except FileNotFoundError:
-#         print(f"Error: File '{filename}' not found.")
-#     except (OSError, IOError) as e:
-#         print(f"Error reading file '{filename}': {e}")
-#     return None
-
-# def append_file(filename, data):
-#     try:
-#         with open(filename, 'a', encoding='utf-8') as file:
-#             file.write(data)
-#         print(f"Data successfully appended to '{filename}'.")
-#     except (OSError, IOError) as e:
-#         print(f"Error appending to file '{filename}': {e}")
 import random
+import os                       # handle file paths 
+
+filename = "letter5.txt"
+base_path = os.path.dirname(os.path.abspath(__file__))  # folder of fileio.py
+file_path = os.path.join(base_path, filename)           # full path to letter5.txt
+# print(os.path.dirname(__file__))
+
 def readfile(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         content = file.read()
+        print(content.splitlines())
         words = [line.strip() for line in content.splitlines() if line.strip()]
+    print(f'total words: {len(words)}')
     return words
-wordOfTheDay = random.choice(readfile("5letter.txt"))
+wordOfTheDay = random.choice(readfile(file_path))
+# wordOfTheDay = random.choice(readfile(r"letter5.txt"))
+
 print(wordOfTheDay)
+
