@@ -3,6 +3,9 @@ import random
 import os
 import sys
 
+from uihelper import *
+from firebase_login import *
+
 # Config
 WIDTH, HEIGHT = 700, 800
 COLORS = {
@@ -11,13 +14,15 @@ COLORS = {
 	"GRAY": (120, 124, 126), "LIGHT_GRAY": (211, 214, 218), "BG": (251, 252, 255)
 }
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+FONT = "sans-serif"
 class WordleGame:
-	def __init__(self, word_length=5):
+	def __init__(self, word_length=5, db_manager=None):
 		# Init 
 		pygame.init()
 		self.word_length = word_length
 		self.row = 6
 		self.col = word_length
+		self.db_manager = db_manager
 		
 		# Dynamic sizing
 		self.tile_size = 80
@@ -30,8 +35,8 @@ class WordleGame:
 		pygame.display.set_caption(f"Wordle by Ming - {self.word_length} Letters")
 
 		# Font 
-		self.font = pygame.font.SysFont("sans-serif", 40)
-		self.font_small = pygame.font.SysFont("sans-serif", 25)
+		self.font = pygame.font.SysFont(FONT, 40)
+		self.font_small = pygame.font.SysFont(FONT, 25)
 		self.icon = pygame.image.load(os.path.join(BASE_PATH, "asset", "icon.png")) #icon
 
 		# Game State
@@ -91,9 +96,10 @@ class WordleGame:
 					if self.current_guess == self.target_word:
 						self.game_over = True
 						self.won = True
+						self.db_manager.save_game(self.target_word, True, len(self.guesses)+1, f"{self.word_length}-char")
 					elif len(self.guesses) >= self.row:
 						self.game_over = True
-					
+						self.db_manager.save_game(self.target_word, False, 6, f"{self.word_length}-char")
 					self.current_guess = ""
 				else:
 					print("Invalid word!") # could add UI shake effect here 
@@ -171,12 +177,104 @@ class WordleGame:
 			
 			self.draw()
 			self.clock.tick(60) # 60 FPS
-		pygame.quit()
-		sys.exit()
+		# pygame.quit()
+		# sys.exit()
 
 				
 
 # --- MAIN EXECUTION ---
+# if __name__ == "__main__":
+# 	game = WordleGame()
+# 	game.run() 
+class MenuSystem:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((600, 700))
+        pygame.display.set_caption("Ming Wordle - Login")
+        self.db = FirebaseManager()
+        self.state = "LOGIN" # Options: LOGIN, MENU, GAME
+        
+        # Login Elements
+        self.email_input = TextInput(150, 200, 300, 50, "Email")
+        self.pass_input = TextInput(150, 270, 300, 50, "Password")
+        self.btn_login = Button(150, 350, 140, 50, "Login", self.do_login)
+        self.btn_signup = Button(310, 350, 140, 50, "Sign Up", self.do_signup)
+        
+        # Menu Elements
+        self.btn_5 = Button(200, 200, 200, 60, "5 Letters", lambda: self.start_game(5))
+        self.btn_6 = Button(200, 280, 200, 60, "6 Letters", lambda: self.start_game(6))
+        self.btn_7 = Button(200, 360, 200, 60, "7 Letters", lambda: self.start_game(7))
+        self.status_msg = "Please Login"
+
+    def do_login(self):
+        email = self.email_input.text
+        password = self.pass_input.text
+        if self.db.login(email, password):
+            self.state = "MENU"
+        else:
+            self.status_msg = "Login Failed"
+
+    def do_signup(self):
+        email = self.email_input.text
+        password = self.pass_input.text
+        if self.db.signup(email, password):
+            self.state = "MENU"
+        else:
+            self.status_msg = "Signup Failed"
+
+    def start_game(self, length):
+        # Launch the game with the selected length
+        game = WordleGame(length, self.db)
+        game.run()
+        # When run() finishes (ESC pressed), we are back here
+        self.screen = pygame.display.set_mode((600, 700)) # Reset screen size
+
+    def run(self):
+        clock = pygame.time.Clock()
+        while True:
+            self.screen.fill((240, 240, 240))
+            events = pygame.event.get()
+            
+            for event in events:
+                if event.type == pygame.QUIT:
+                    pygame.quit(); sys.exit()
+                
+                if self.state == "LOGIN":
+                    self.email_input.handle_event(event)
+                    self.pass_input.handle_event(event)
+                    self.btn_login.handle_event(event)
+                    self.btn_signup.handle_event(event)
+                elif self.state == "MENU":
+                    self.btn_5.handle_event(event)
+                    self.btn_6.handle_event(event)
+                    self.btn_7.handle_event(event)
+
+            # Drawing
+            if self.state == "LOGIN":
+                self.email_input.draw(self.screen)
+                self.pass_input.draw(self.screen)
+                self.btn_login.draw(self.screen)
+                self.btn_signup.draw(self.screen)
+                
+                msg = pygame.font.SysFont(FONT, 20).render(self.status_msg, True, (255, 0, 0))
+                self.screen.blit(msg, (250, 420))
+                
+            elif self.state == "MENU":
+                title = pygame.font.SysFont(FONT, 40).render(f"Welcome {self.db.email.split('@')[0]}!", True, (0,0,0))
+                self.screen.blit(title, (50, 50))
+                
+                # Show Stats
+                stats = self.db.get_stats()
+                stat_surf = pygame.font.SysFont(FONT, 20).render(stats, True, (50, 50, 50))
+                self.screen.blit(stat_surf, (50, 100))
+
+                self.btn_5.draw(self.screen)
+                self.btn_6.draw(self.screen)
+                self.btn_7.draw(self.screen)
+
+            pygame.display.flip()
+            clock.tick(30)
+
 if __name__ == "__main__":
-	game = WordleGame()
-	game.run() 
+    app = MenuSystem()
+    app.run()
