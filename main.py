@@ -1,155 +1,182 @@
-import pygame 
+import pygame
 import random
 import os
 import sys
-import bisect 
 
-# init pygame 
-pygame.init()
-
-#
-WIDTH, HEIGHT = 600, 700
-WHITE, BLACK, RED, BLUE, GREEN, YELLOW, GRAY, LIGHT_GRAY, SUPER_L_GRAY = (255, 255, 255), (0, 0, 0), (255, 0, 0), (0, 0, 255), (0, 255, 0), (255, 255, 0), (200, 200, 200), (240, 240, 240), (251, 252, 255)
-TEXT_COLOR = BLACK
-
-base_path = os.path.dirname(os.path.abspath(__file__))  # folder of main.py
-
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Wordle by Ming")
-icon_path = os.path.join(base_path, "asset", "icon.svg.png")        # add asset folder then icon file path
-gameIcon = pygame.image.load(icon_path)
-pygame.display.set_icon(gameIcon)
-
-font = pygame.font.SysFont("arial", 40)
-font_small = pygame.font.SysFont("arial", 25)
-
-# filename = "letter5.txt"
-def choose_word(filename = "letter5.txt"):
-	file_path = os.path.join(base_path, "data", filename)           # full path to letter5.txt
-	words = []
-	print(file_path)
-	with open(file_path, 'r', encoding='utf-8') as file:
-		content = file.read()
-		# print(content.splitlines())
-		words = [line.strip() for line in content.splitlines() if line.strip()]
-
-	return words
-
-def is_valid_word(targetWord, wordlist):
-	try:
-		index = bisect.bisect_left(wordlist, targetWord)
-		return index < len(wordlist) and wordlist[index] == targetWord
-	except Exception as e:
-		print(f"Error in is_valid_word: {e}")
-		return False	
-
-wordlist = choose_word()
-targetWord = random.choice(wordlist)
-print(f"Word of the day is: {targetWord}")
-RUNNING = True
-row, col = 6,5
-margin, tile_size = 10, 60      # margin between tiles and size of each tile
-gameover = False        # stop the game when true (lose after 6 round or win)
-win = False
-guesses = []            # list of guessed words
-mp = [0]*26
-bg_grid = [[LIGHT_GRAY for _ in range(col)] for _ in range(row)]
-current = ""
-clock = pygame.time.Clock()
-
-for ch in targetWord:
-	mp[ord(ch)-ord('a')] += 1
-
-def run():
-	global RUNNING, gameover, win, current      # make them modifiable inside the function
-	while RUNNING:
-		# print("Game running...")
-		screen.fill(SUPER_L_GRAY)
+# Config
+WIDTH, HEIGHT = 700, 800
+COLORS = {
+	"WHITE": (255, 255, 255), "BLACK": (0, 0, 0), "RED": (255, 0, 0),
+	"BLUE": (0, 0, 255), "GREEN": (106, 170, 100), "YELLOW": (201, 180, 88), 
+	"GRAY": (120, 124, 126), "LIGHT_GRAY": (211, 214, 218), "BG": (251, 252, 255)
+}
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+class WordleGame:
+	def __init__(self, word_length=5):
+		# Init 
+		pygame.init()
+		self.word_length = word_length
+		self.row = 6
+		self.col = word_length
 		
-		for event in pygame.event.get():
-			if event.type == pygame.QUIT:
-				pygame.quit()
-				sys.exit()
-			
-			if event.type == pygame.KEYDOWN:
-				if event.key == pygame.K_ESCAPE:    # press esc to quit
-					pygame.quit()
-					sys.exit()  
-				elif not gameover:
-					if event.key == pygame.K_RETURN:
-						# print("Enter pressed")
-						if len(current) == col:
-							if not is_valid_word(current, wordlist):
-								print(f"{current} is not a valid targetWord.")
-								continue
-							print(f"Submitted word: {current}")
-							guesses.append(current)                 # add to guessed words
-							temp_mp = mp.copy()
-							for k,ch in enumerate(current):
-								if ch == targetWord[k]:
-									bg_grid[len(guesses)-1][k] = GREEN
-									temp_mp[ord(ch)-ord('a')] -= 1
-							for k,ch in enumerate(current):
-								if bg_grid[len(guesses)-1][k] != GREEN and temp_mp[ord(ch)-ord('a')] > 0:
-									bg_grid[len(guesses)-1][k] = YELLOW
-									temp_mp[ord(ch)-ord('a')] -= 1
-								elif bg_grid[len(guesses)-1][k] == LIGHT_GRAY:
-									bg_grid[len(guesses)-1][k] = GRAY
-							if current == targetWord:
-								win = True
-								gameover = True
-								print("You win!")
-							elif len(guesses) == row:
-								gameover = True
+		# Dynamic sizing
+		self.tile_size = 80
+		self.margin = 15
+		self.screen_width = (self.tile_size + self.margin) * self.col + (self.margin * 5)		# dynamic width based on word length
+		self.screen_height = (self.tile_size + self.margin) * self.row + 250 # spacing from the top
+		
+		# Setup screen
+		self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))	# dynamic
+		pygame.display.set_caption(f"Wordle by Ming - {self.word_length} Letters")
 
-							current = ""  # reset after submit
-					elif event.key == pygame.K_BACKSPACE:
-						print("Backspace pressed")
-						if len(current) > 0:
-							current = current[:-1]      # remove last character
-							print(f"Current word: {current}")
-					elif event.unicode.isalpha() and len(event.unicode) == 1 and len(current) < col:
-						print(f"Key pressed: {event.unicode}")
-						current += event.unicode.lower()
-		# # Draw board 
-		for r in range(row):
-			for c in range(col):
-				x = c*(tile_size + margin) + (WIDTH - col*tile_size - (col-1)*margin)//2      # center the board by plus side margin to 0, tile + margin, 2*(tile + margin), 3*(tile + margin), ...
-				y = r*(tile_size + margin) + 50     # +50 to spacing from top
+		# Font 
+		self.font = pygame.font.SysFont("sans-serif", 40)
+		self.font_small = pygame.font.SysFont("sans-serif", 25)
+		self.icon = pygame.image.load(os.path.join(BASE_PATH, "asset", "icon.png")) #icon
 
-				letter = ""
-				LETTER_BG = bg_grid[r][c]            # background color of letter
-				LETTER_BG_BORDER = LETTER_BG if LETTER_BG != LIGHT_GRAY else GRAY
-				if r < len(guesses):
-					letter = guesses[r][c]
-				elif r == len(guesses) and c < len(current):
-					letter = current[c]
+		# Game State
+		self.clock = pygame.time.Clock()
+		self.word_list = self.load_words(f"letter{self.word_length}.txt")
+		self.reset_game()		# always reset game on init
 
+	def load_words(self, filename):
+		path = os.path.join(BASE_PATH, "data", filename)
+		if not os.path.exists(path):
+			print(f"Warning: {path} not found. Exiting...")
+			exit(1)
+		with open(path, 'r', encoding='utf-8') as f:
+			return [line.strip().lower() for line in f if len(line.strip()) == self.word_length] # add word to list only if correct length
+
+	def reset_game(self):
+		self.target_word = random.choice(self.word_list)
+		self.valid_words = set(self.word_list) # for lookup
+		self.guesses = [] 				# list of tuples (word, [colors])
+		self.current_guess = ""
+		self.game_over = False
+		self.won = False
+		print(f"Target: {self.target_word}")
+
+	def check_guess_logic(self, guess):
+		color = [COLORS["GRAY"]] * self.word_length
+		cnt = {}        # target word char count
+		
+		for char in self.target_word:
+			cnt[char] = cnt.get(char, 0) + 1 
+			# cnt.get(char, 0) returns 0 if char not in cnt
+
+		for i, char in enumerate(guess):
+			if char == self.target_word[i]:
+				color[i] = COLORS["GREEN"]
+				cnt[char] -= 1
+
+		for i, char in enumerate(guess):
+			if color[i] == COLORS["GRAY"]: # Only check if not green
+				if char in cnt and cnt[char] > 0:
+					color[i] = COLORS["YELLOW"]
+					cnt[char] -= 1
+
+		return color
+	
+	def handle_input(self, event):
+		if self.game_over:
+			if event.key == pygame.K_SPACE: 
+				self.reset_game()
+			return
+		if event.key == pygame.K_RETURN:
+			if len(self.current_guess) == self.word_length:
+				if self.current_guess in self.valid_words:
+					color = self.check_guess_logic(self.current_guess)
+					self.guesses.append((self.current_guess, color))
 					
-				rect = pygame.Rect(x, y, tile_size, tile_size)
-				pygame.draw.rect(screen, LETTER_BG, rect)
-				pygame.draw.rect(screen, LETTER_BG_BORDER, rect, 2)   # border
+					if self.current_guess == self.target_word:
+						self.game_over = True
+						self.won = True
+					elif len(self.guesses) >= self.row:
+						self.game_over = True
+					
+					self.current_guess = ""
+				else:
+					print("Invalid word!") # could add UI shake effect here 
+		elif event.key == pygame.K_BACKSPACE:
+			self.current_guess = self.current_guess[:-1]
+		elif event.unicode.isalpha() and len(self.current_guess) < self.word_length:
+			self.current_guess += event.unicode.lower()
+			print("inpur:", event.unicode.lower())
 
-				if letter:
-					text_surface = font.render(letter.upper(), True, TEXT_COLOR)
-					text_rect = text_surface.get_rect(center=rect.center)				# rect defined above of the tile
-					screen.blit(text_surface, text_rect)
-		if gameover:
-			msg = "You Win!" if win else f"You lose! The word was {targetWord.upper()}"
-			# print(msg)
-			msg_surface = font.render(msg, True, BLACK)
-			msg_rect = msg_surface.get_rect(center=(WIDTH//2, HEIGHT - 100))	# choose coord for center of msg_surface
-			screen.blit(msg_surface, msg_rect)
+	def draw(self):
+		self.screen.fill(COLORS['BG'])
+
+		grid_width = self.word_length * (self.tile_size + self.margin) - self.margin	# row*tile_size + (row-1)*margin
+		start_x = (self.screen_width - grid_width) // 2
+		start_y = 50
+
+		for r in range(self.row):
+			for c in range(self.col):
+				x = start_x + c * (self.tile_size + self.margin)
+				y = start_y + r * (self.tile_size + self.margin)
+				rect = pygame.Rect(x, y, self.tile_size, self.tile_size) # square rect
 				
+				# default val
+				color = COLORS["LIGHT_GRAY"]
+				letter = ""
+				border_color = COLORS["GRAY"]
 
+				# if submitted guess
+				if r < len(self.guesses):
+					word, color = self.guesses[r]
+					letter = word[c]
+					color = color[c]
+					border_color = color
+				
+				# if typing
+				elif r == len(self.guesses):
+					color = COLORS["WHITE"]
+					if c < len(self.current_guess):
+						letter = self.current_guess[c]
+						# color = COLORS["WHITE"]
+						border_color = COLORS["BLACK"]
+					# else:
+					#     color = COLORS["BG"] # Empty slot, almost same color as white
+
+				# draw tile
+				rect = pygame.Rect(x, y, self.tile_size, self.tile_size)
+				# if color != COLORS["BG"]:
+				pygame.draw.rect(self.screen, color, rect)
+				pygame.draw.rect(self.screen, border_color, rect, 2)
+
+				# draw Letter
+				if letter:
+					text = self.font.render(letter.upper(), True, COLORS["WHITE"] if r < len(self.guesses) else COLORS["BLACK"])
+					# if not current guess then color white else black
+					text_rect = text.get_rect(center=rect.center)
+					self.screen.blit(text, text_rect)
+
+		# gameover
+		if self.game_over:
+			msg = "You Win! Press SPACE to play again." if self.won else f"You Lose! Word was '{self.target_word.upper()}'. Press SPACE to play again."
+			text = self.font.render(msg, True, COLORS["GREEN"] if self.won else COLORS["RED"]) # font small
+			text_rect = text.get_rect(center=(self.screen_width // 2, self.screen_height - 100))
+			self.screen.blit(text, text_rect)
+		
 		pygame.display.flip()
-		clock.tick(60) 
-
-
-if __name__ == "__main__":
-	try:
-		run()
-	except Exception as e:
-		print(f"Error: {e}")
+	
+	def run(self):
+		running = True
+		while running:
+			for event in pygame.event.get():
+				if event.type == pygame.QUIT:
+					running = False
+				elif event.type == pygame.KEYDOWN:
+					self.handle_input(event)
+			
+			self.draw()
+			self.clock.tick(60) # 60 FPS
 		pygame.quit()
 		sys.exit()
+
+				
+
+# --- MAIN EXECUTION ---
+if __name__ == "__main__":
+	game = WordleGame()
+	game.run() 
